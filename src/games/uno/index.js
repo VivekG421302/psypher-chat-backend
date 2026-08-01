@@ -82,7 +82,12 @@ const UnoGame = {
         U.nextTurn(state);
       } else if (played.value === 'reverse') {
         state.direction *= -1;
-        state.log.push('Reverse! Direction flipped.');
+        // With exactly 2 players, reversing direction is a mathematical
+        // no-op (turn+1 and turn-1 land on the same index mod 2), so the
+        // official 2-player rule is that Reverse behaves like Skip: the
+        // same player takes another turn.
+        state.log.push('Reverse! With two players, that acts as a Skip — go again.');
+        U.nextTurn(state);
         U.nextTurn(state);
       } else if (played.value === '+2') {
         state.log.push('Draw Two! Opponent draws 2 cards.');
