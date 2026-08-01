@@ -27,16 +27,13 @@ export function createDeck() {
   return shuffle(deck);
 }
 
-/**
- * A card is legal if it matches the active color, OR matches the top
- * card's value/symbol (regardless of color) — this single rule already
- * covers every "X is allowed on X" case: a Skip on a Skip, a Reverse on a
- * Reverse, a Draw Two on a Draw Two, all regardless of color, exactly like
- * matching a Green 5 on a Red 5. Wild and Wild Draw Four are always legal
- * (first branch), which covers "+4 is allowed on +4" and "+4 is allowed on
- * +2" — a wild card can always be played, on anything.
- */
-export function isPlayable(card, topCard, activeColor) {
+export function isPlayable(card, topCard, activeColor, pendingDraw = 0) {
+  // During a draw stack, only counter-cards are legal
+  if (pendingDraw > 0) {
+    if (card.value === '+2') return true;   // can always stack +2 on +2 or +4 stack
+    if (card.value === 'wild+4') return true; // can always stack +4
+    return false;
+  }
   if (card.color === 'wild') return true;
   if (card.color === activeColor) return true;
   if (topCard && card.value === topCard.value) return true;
@@ -44,7 +41,7 @@ export function isPlayable(card, topCard, activeColor) {
 }
 
 export function freshState(playerIds) {
-  const state = {
+  return {
     players: [...playerIds],
     hands: {},
     deck: [],
@@ -57,8 +54,9 @@ export function freshState(playerIds) {
     unoCalled: new Set(),
     log: [],
     lastColorChange: null,
+    pendingDraw: 0,   // stacked draw penalty waiting to be resolved
+    lastMove: null,   // { playerLabel, card } for the "last move" display line
   };
-  return state;
 }
 
 export function startGame(state) {
@@ -69,12 +67,12 @@ export function startGame(state) {
   state.winner = null;
   state.unoCalled = new Set();
   state.log = [];
+  state.pendingDraw = 0;
+  state.lastMove = null;
 
   for (const pid of state.players) {
     state.hands[pid] = [];
-    for (let i = 0; i < 7; i++) {
-      state.hands[pid].push(state.deck.pop());
-    }
+    for (let i = 0; i < 7; i++) state.hands[pid].push(state.deck.pop());
   }
 
   // eslint-disable-next-line no-constant-condition
@@ -93,7 +91,6 @@ export function startGame(state) {
   const top = state.discard[state.discard.length - 1];
   state.log.push(`Top card is ${top.color} ${top.value}`);
   state.started = true;
-  return state;
 }
 
 export function reshuffleDiscard(state) {
@@ -135,10 +132,11 @@ export function playerLabel(state, playerId) {
 
 export function buildClientState(state, playerId) {
   const opponent = getOpponent(state, playerId);
+  const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
   return {
     myHand: state.hands[playerId] || [],
     opponentCount: (state.hands[opponent] || []).length,
-    discardTop: state.discard.length ? state.discard[state.discard.length - 1] : null,
+    discardTop: top,
     activeColor: state.activeColor,
     myTurn: state.players[state.turn] === playerId,
     turnIndex: state.turn,
@@ -150,6 +148,8 @@ export function buildClientState(state, playerId) {
     playerIndex: state.players.indexOf(playerId),
     started: state.started,
     lastColorChange: state.lastColorChange,
+    pendingDraw: state.pendingDraw,
+    lastMove: state.lastMove,
   };
 }
 
