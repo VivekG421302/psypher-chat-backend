@@ -1,4 +1,5 @@
 import UnoGame from './uno/index.js';
+import GuessWhoGame from './guesswho/index.js';
 
 /**
  * Add future games here. Each entry must implement:
@@ -6,7 +7,7 @@ import UnoGame from './uno/index.js';
  *   createState(playerIds), start(state), buildClientState(state, playerId),
  *   actions: { [actionName]: (state, playerId, payload) => void }
  */
-const GAMES = [UnoGame];
+const GAMES = [UnoGame, GuessWhoGame];
 
 export const gameRegistry = new Map(GAMES.map((g) => [g.id, g]));
 
