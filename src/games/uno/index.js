@@ -59,6 +59,18 @@ const UnoGame = {
       if (played.color === 'wild') {
         const chosen = payload.chosenColor;
         state.activeColor = U.COLORS.includes(chosen) ? chosen : state.activeColor || 'R';
+        const colorName = U.COLOR_NAMES[state.activeColor];
+        state.log.push(`${U.playerLabel(state, playerId)} changed the color to ${colorName}.`);
+        // Structured event (not just a log line) so the UI can show a clear,
+        // impossible-to-miss banner to *both* players — the player who
+        // chose it, and their opponent.
+        state.lastColorChange = {
+          seq: (state.lastColorChange?.seq || 0) + 1,
+          byPlayerId: playerId,
+          byLabel: U.playerLabel(state, playerId),
+          color: state.activeColor,
+          colorName,
+        };
       } else {
         state.activeColor = played.color;
       }
@@ -77,7 +89,7 @@ const UnoGame = {
       const opponent = U.getOpponent(state, playerId);
 
       if (played.value === 'skip') {
-        state.log.push('Skip! Opponent loses a turn.');
+        state.log.push(`Skip! ${U.playerLabel(state, opponent)} loses a turn — ${U.playerLabel(state, playerId)} goes again.`);
         U.nextTurn(state);
         U.nextTurn(state);
       } else if (played.value === 'reverse') {
@@ -86,16 +98,16 @@ const UnoGame = {
         // no-op (turn+1 and turn-1 land on the same index mod 2), so the
         // official 2-player rule is that Reverse behaves like Skip: the
         // same player takes another turn.
-        state.log.push('Reverse! With two players, that acts as a Skip — go again.');
+        state.log.push(`Reverse! With two players that's a Skip — ${U.playerLabel(state, playerId)} goes again.`);
         U.nextTurn(state);
         U.nextTurn(state);
       } else if (played.value === '+2') {
-        state.log.push('Draw Two! Opponent draws 2 cards.');
+        state.log.push(`Draw Two! ${U.playerLabel(state, opponent)} draws 2 and loses a turn.`);
         U.drawCards(state, opponent, 2);
         U.nextTurn(state);
         U.nextTurn(state);
       } else if (played.value === 'wild+4') {
-        state.log.push('Wild Draw Four! Opponent draws 4 cards.');
+        state.log.push(`Wild Draw Four! ${U.playerLabel(state, opponent)} draws 4 and loses a turn.`);
         U.drawCards(state, opponent, 4);
         U.nextTurn(state);
         U.nextTurn(state);

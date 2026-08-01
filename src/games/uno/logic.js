@@ -1,4 +1,5 @@
 const COLORS = ['R', 'Y', 'G', 'B'];
+const COLOR_NAMES = { R: 'Red', Y: 'Yellow', G: 'Green', B: 'Blue' };
 const ACTIONS = ['skip', 'reverse', '+2'];
 const MIN_DECK_RESERVE = 5;
 
@@ -26,6 +27,15 @@ export function createDeck() {
   return shuffle(deck);
 }
 
+/**
+ * A card is legal if it matches the active color, OR matches the top
+ * card's value/symbol (regardless of color) — this single rule already
+ * covers every "X is allowed on X" case: a Skip on a Skip, a Reverse on a
+ * Reverse, a Draw Two on a Draw Two, all regardless of color, exactly like
+ * matching a Green 5 on a Red 5. Wild and Wild Draw Four are always legal
+ * (first branch), which covers "+4 is allowed on +4" and "+4 is allowed on
+ * +2" — a wild card can always be played, on anything.
+ */
 export function isPlayable(card, topCard, activeColor) {
   if (card.color === 'wild') return true;
   if (card.color === activeColor) return true;
@@ -46,6 +56,7 @@ export function freshState(playerIds) {
     winner: null,
     unoCalled: new Set(),
     log: [],
+    lastColorChange: null,
   };
   return state;
 }
@@ -138,6 +149,7 @@ export function buildClientState(state, playerId) {
     log: state.log.slice(-8),
     playerIndex: state.players.indexOf(playerId),
     started: state.started,
+    lastColorChange: state.lastColorChange,
   };
 }
 
@@ -145,4 +157,4 @@ export function maintainDeck(state) {
   if (state.deck.length < MIN_DECK_RESERVE) reshuffleDiscard(state);
 }
 
-export { COLORS };
+export { COLORS, COLOR_NAMES };
