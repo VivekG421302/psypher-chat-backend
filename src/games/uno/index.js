@@ -2,17 +2,13 @@ import * as U from './logic.js';
 
 function requireStarted(state) {
   if (!state.started || state.winner) {
-    const err = new Error('Game not active.');
-    err.code = 'not_active';
-    throw err;
+    throw Object.assign(new Error('Game not active.'), { code: 'not_active' });
   }
 }
 
 function requireTurn(state, playerId) {
   if (state.players[state.turn] !== playerId) {
-    const err = new Error('Not your turn.');
-    err.code = 'not_turn';
-    throw err;
+    throw Object.assign(new Error('Not your turn.'), { code: 'not_turn' });
   }
 }
 
@@ -24,24 +20,16 @@ const UnoGame = {
   minPlayers: 2,
   maxPlayers: 2,
 
-  createState(playerIds) {
-    return U.freshState(playerIds);
-  },
-
-  start(state) {
-    U.startGame(state);
-  },
-
-  buildClientState(state, playerId) {
-    return U.buildClientState(state, playerId);
-  },
+  createState(playerIds) { return U.freshState(playerIds); },
+  start(state) { U.startGame(state); },
+  buildClientState(state, playerId) { return U.buildClientState(state, playerId); },
 
   actions: {
     play_card(state, playerId, payload) {
       requireStarted(state);
       requireTurn(state, playerId);
 
-      const card = payload && payload.card;
+      const card = payload?.card;
       if (!card) throw Object.assign(new Error('Invalid card.'), { code: 'bad_card' });
 
       const hand = state.hands[playerId];
@@ -49,25 +37,31 @@ const UnoGame = {
       if (idx === -1) throw Object.assign(new Error('Card not in hand.'), { code: 'bad_card' });
 
       const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
-      if (!U.isPlayable(card, top, state.activeColor)) {
-        throw Object.assign(new Error('Card does not match color or value.'), { code: 'illegal' });
+
+      // Pass pendingDraw so isPlayable can enforce stack-only mode
+      if (!U.isPlayable(card, top, state.activeColor, state.pendingDraw)) {
+        const msg = state.pendingDraw > 0
+          ? `Stack penalty active — you must counter with +2 or +4, or draw ${state.pendingDraw}.`
+          : 'Card does not match color or value.';
+        throw Object.assign(new Error(msg), { code: 'illegal' });
       }
 
       const played = hand.splice(idx, 1)[0];
       state.discard.push(played);
 
+      const label = U.playerLabel(state, playerId);
+      const opponent = U.getOpponent(state, playerId);
+
+      // Handle color for wilds
       if (played.color === 'wild') {
         const chosen = payload.chosenColor;
         state.activeColor = U.COLORS.includes(chosen) ? chosen : state.activeColor || 'R';
         const colorName = U.COLOR_NAMES[state.activeColor];
-        state.log.push(`${U.playerLabel(state, playerId)} changed the color to ${colorName}.`);
-        // Structured event (not just a log line) so the UI can show a clear,
-        // impossible-to-miss banner to *both* players — the player who
-        // chose it, and their opponent.
+        state.log.push(`${label} changed the color to ${colorName}.`);
         state.lastColorChange = {
           seq: (state.lastColorChange?.seq || 0) + 1,
           byPlayerId: playerId,
-          byLabel: U.playerLabel(state, playerId),
+          byLabel: label,
           color: state.activeColor,
           colorName,
         };
@@ -75,42 +69,44 @@ const UnoGame = {
         state.activeColor = played.color;
       }
 
-      state.log.push(`${U.playerLabel(state, playerId)} played ${played.color} ${played.value}`);
+      // Track last move for UI display
+      state.lastMove = { playerLabel: label, card: played };
+      state.log.push(`${label} played ${played.color} ${played.value}`);
 
-      if (hand.length === 1) {
-        state.log.push(`${U.playerLabel(state, playerId)} has UNO!`);
-      }
+      if (hand.length === 1) state.log.push(`${label} has UNO!`);
       if (hand.length === 0) {
         state.winner = playerId;
-        state.log.push(`${U.playerLabel(state, playerId)} WINS!`);
+        state.log.push(`${label} WINS!`);
         return;
       }
 
-      const opponent = U.getOpponent(state, playerId);
-
+      // ── Special card effects ─────────────────────────────────────
       if (played.value === 'skip') {
-        state.log.push(`Skip! ${U.playerLabel(state, opponent)} loses a turn — ${U.playerLabel(state, playerId)} goes again.`);
-        U.nextTurn(state);
-        U.nextTurn(state);
+        // Skip: opponent loses turn, player goes again (2-player)
+        state.log.push(`Skip! ${U.playerLabel(state, opponent)} loses a turn.`);
+        U.nextTurn(state); // advance to opponent
+        U.nextTurn(state); // advance back to current player
+
       } else if (played.value === 'reverse') {
+        // Reverse in 2-player = Skip
         state.direction *= -1;
-        // With exactly 2 players, reversing direction is a mathematical
-        // no-op (turn+1 and turn-1 land on the same index mod 2), so the
-        // official 2-player rule is that Reverse behaves like Skip: the
-        // same player takes another turn.
-        state.log.push(`Reverse! With two players that's a Skip — ${U.playerLabel(state, playerId)} goes again.`);
+        state.log.push(`Reverse! ${label} goes again.`);
         U.nextTurn(state);
         U.nextTurn(state);
+
       } else if (played.value === '+2') {
-        state.log.push(`Draw Two! ${U.playerLabel(state, opponent)} draws 2 and loses a turn.`);
-        U.drawCards(state, opponent, 2);
+        // Stack: add to pending, opponent must counter or absorb
+        state.pendingDraw += 2;
+        state.log.push(`+2 stacked! ${U.playerLabel(state, opponent)} must counter or draw ${state.pendingDraw}.`);
+        // Pass turn to opponent — they decide to counter or draw
         U.nextTurn(state);
-        U.nextTurn(state);
+
       } else if (played.value === 'wild+4') {
-        state.log.push(`Wild Draw Four! ${U.playerLabel(state, opponent)} draws 4 and loses a turn.`);
-        U.drawCards(state, opponent, 4);
+        // Stack: add to pending, opponent must counter or absorb
+        state.pendingDraw += 4;
+        state.log.push(`Wild +4 stacked! ${U.playerLabel(state, opponent)} must counter or draw ${state.pendingDraw}.`);
         U.nextTurn(state);
-        U.nextTurn(state);
+
       } else {
         U.nextTurn(state);
       }
@@ -122,22 +118,33 @@ const UnoGame = {
       requireStarted(state);
       requireTurn(state, playerId);
 
-      const drawn = U.drawCards(state, playerId, 1);
-      if (drawn.length) {
-        state.log.push(`${U.playerLabel(state, playerId)} drew a card.`);
+      if (state.pendingDraw > 0) {
+        // Player accepts the penalty stack
+        const total = state.pendingDraw;
+        state.pendingDraw = 0;
+        U.drawCards(state, playerId, total);
+        state.log.push(`${U.playerLabel(state, playerId)} drew ${total} cards (penalty).`);
+        state.lastMove = { playerLabel: U.playerLabel(state, playerId), card: null, drawPenalty: total };
+        U.nextTurn(state);
       } else {
-        state.log.push('No cards left to draw!');
+        // Normal draw
+        const drawn = U.drawCards(state, playerId, 1);
+        if (drawn.length) {
+          state.log.push(`${U.playerLabel(state, playerId)} drew a card.`);
+        } else {
+          state.log.push('No cards left to draw!');
+        }
+
+        const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
+        const canPlay = drawn.length ? U.isPlayable(drawn[0], top, state.activeColor, 0) : false;
+
+        if (!canPlay) {
+          // Drawn card can't play — pass turn
+          U.nextTurn(state);
+        }
+        // If canPlay — player may play the drawn card (turn stays)
       }
 
-      const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
-      const canPlay = drawn.length ? U.isPlayable(drawn[0], top, state.activeColor) : false;
-
-      if (drawn.length && !canPlay) {
-        state.log.push('Drawn card not playable. Turn passes.');
-        U.nextTurn(state);
-      } else if (!drawn.length) {
-        U.nextTurn(state);
-      }
       U.maintainDeck(state);
     },
 
