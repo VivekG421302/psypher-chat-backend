@@ -6,6 +6,10 @@ import {
   markDisconnected,
   removeMember,
   pushMessage,
+  findMessage,
+  editMessage,
+  deleteMessage,
+  toggleReaction,
   roomSummary,
   listMembers,
 } from './roomManager.js';
@@ -75,9 +79,44 @@ export function registerSocketHandlers(io) {
         senderName: sender.name,
         senderColor: sender.color,
         ts: Date.now(),
+        reactions: {},
       };
       pushMessage(room, message);
       io.to(roomChannel(room.id)).emit('chat:message', message);
+    });
+
+    socket.on('chat:edit', ({ roomId, messageId, ciphertext } = {}) => {
+      const room = getRoom(roomId);
+      if (!room || socket.data.userId == null) return;
+      const msg = findMessage(room, messageId);
+      // Only the original sender may edit their own message.
+      if (!msg || msg.senderId !== socket.data.userId) return;
+      editMessage(room, messageId, ciphertext);
+      io.to(roomChannel(room.id)).emit('chat:message_edited', {
+        messageId,
+        ciphertext,
+        editedAt: msg.editedAt,
+      });
+    });
+
+    socket.on('chat:delete', ({ roomId, messageId } = {}) => {
+      const room = getRoom(roomId);
+      if (!room || socket.data.userId == null) return;
+      const msg = findMessage(room, messageId);
+      // Only the original sender may delete their own message.
+      if (!msg || msg.senderId !== socket.data.userId) return;
+      deleteMessage(room, messageId);
+      io.to(roomChannel(room.id)).emit('chat:message_deleted', { messageId });
+    });
+
+    socket.on('chat:react', ({ roomId, messageId, emoji } = {}) => {
+      const room = getRoom(roomId);
+      if (!room || socket.data.userId == null || !emoji) return;
+      if (!findMessage(room, messageId)) return;
+      const reactions = toggleReaction(room, messageId, socket.data.userId, emoji);
+      if (reactions) {
+        io.to(roomChannel(room.id)).emit('chat:reaction', { messageId, reactions });
+      }
     });
 
     socket.on('chat:typing', ({ roomId, isTyping } = {}) => {
@@ -89,6 +128,23 @@ export function registerSocketHandlers(io) {
         userId: sender.userId,
         name: sender.name,
         isTyping: !!isTyping,
+      });
+    });
+
+    // Ephemeral, room-wide emoji burst — not tied to a specific message,
+    // used for quick reactions during a minigame (or anywhere else in the
+    // room). Not persisted anywhere; purely a live relay for an animation.
+    socket.on('room:react', ({ roomId, emoji } = {}) => {
+      const room = getRoom(roomId);
+      if (!room || socket.data.userId == null || !emoji) return;
+      const sender = room.members.get(socket.data.userId);
+      if (!sender) return;
+      io.to(roomChannel(room.id)).emit('room:reaction', {
+        id: nanoid(8),
+        emoji,
+        byUserId: sender.userId,
+        byName: sender.name,
+        ts: Date.now(),
       });
     });
 

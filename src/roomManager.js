@@ -112,6 +112,52 @@ export function pushMessage(room, message) {
   touch(room);
 }
 
+export function findMessage(room, messageId) {
+  return room.messages.find((m) => m.id === messageId);
+}
+
+export function editMessage(room, messageId, ciphertext) {
+  const msg = findMessage(room, messageId);
+  if (!msg) return null;
+  msg.ciphertext = ciphertext;
+  msg.edited = true;
+  msg.editedAt = now();
+  touch(room);
+  return msg;
+}
+
+export function deleteMessage(room, messageId) {
+  const idx = room.messages.findIndex((m) => m.id === messageId);
+  if (idx === -1) return false;
+  room.messages.splice(idx, 1);
+  touch(room);
+  return true;
+}
+
+// One active emoji reaction per user per message — clicking the same emoji
+// again removes it (toggle), clicking a different one switches to it.
+export function toggleReaction(room, messageId, userId, emoji) {
+  const msg = findMessage(room, messageId);
+  if (!msg) return null;
+  if (!msg.reactions) msg.reactions = {};
+
+  let hadThisEmoji = false;
+  for (const [em, users] of Object.entries(msg.reactions)) {
+    const i = users.indexOf(userId);
+    if (i !== -1) {
+      users.splice(i, 1);
+      if (em === emoji) hadThisEmoji = true;
+      if (users.length === 0) delete msg.reactions[em];
+    }
+  }
+  if (!hadThisEmoji) {
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+    msg.reactions[emoji].push(userId);
+  }
+  touch(room);
+  return msg.reactions;
+}
+
 export function listMembers(room) {
   return Array.from(room.members.values()).map((m) => ({
     userId: m.userId,
