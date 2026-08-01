@@ -112,15 +112,19 @@ export function registerSocketHandlers(io) {
         entry.playerIds.push(socket.data.userId);
       }
 
-      if (!entry.state) {
+      if (!entry.state && entry.playerIds.length >= game.minPlayers) {
         entry.state = game.createState(entry.playerIds);
       }
 
-      if (entry.playerIds.length === game.minPlayers && !entry.state.started) {
+      if (entry.state && entry.playerIds.length === game.minPlayers && !entry.state.started) {
         game.start(entry.state);
       }
 
-      broadcastGameState(io, room, game, entry);
+      if (entry.state) {
+        broadcastGameState(io, room, game, entry);
+      } else {
+        socket.emit('game:waiting', { gameId: game.id });
+      }
     });
 
     socket.on('game:action', ({ roomId, gameId, action, payload } = {}) => {
