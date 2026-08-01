@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: psypher-chat-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: CORS_ORIGIN
+        value: https://your-frontend.vercel.app
