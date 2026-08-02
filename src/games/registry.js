@@ -1,5 +1,6 @@
 import UnoGame from './uno/index.js';
 import GuessWhoGame from './guesswho/index.js';
+import TicTacToeGame from './tictactoe/index.js';
 
 /**
  * Add future games here. Each entry must implement:
@@ -7,7 +8,7 @@ import GuessWhoGame from './guesswho/index.js';
  *   createState(playerIds), start(state), buildClientState(state, playerId),
  *   actions: { [actionName]: (state, playerId, payload) => void }
  */
-const GAMES = [UnoGame, GuessWhoGame];
+const GAMES = [UnoGame, GuessWhoGame, TicTacToeGame];
 
 export const gameRegistry = new Map(GAMES.map((g) => [g.id, g]));
 
