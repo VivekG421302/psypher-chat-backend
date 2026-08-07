@@ -12,6 +12,15 @@ function requireTurn(state, playerId) {
   }
 }
 
+// Does this player currently hold any card that's legal to play right now?
+// Used to let a player keep acting (instead of auto-passing) after a color
+// change or after absorbing a draw penalty.
+function hasPlayableCard(state, playerId) {
+  const hand = state.hands[playerId] || [];
+  const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
+  return hand.some((c) => U.isPlayable(c, top, state.activeColor, state.pendingDraw, state.pendingStackValue));
+}
+
 const UnoGame = {
   id: 'uno',
   name: 'UNO',
@@ -38,10 +47,11 @@ const UnoGame = {
 
       const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
 
-      // Pass pendingDraw so isPlayable can enforce stack-only mode
-      if (!U.isPlayable(card, top, state.activeColor, state.pendingDraw)) {
+      // Pass pendingDraw/pendingStackValue so isPlayable can enforce stack-only mode
+      // (a stacked card's addition must be the same as or greater than the last one played).
+      if (!U.isPlayable(card, top, state.activeColor, state.pendingDraw, state.pendingStackValue)) {
         const msg = state.pendingDraw > 0
-          ? `Stack penalty active — you must counter with +2 or +4, or draw ${state.pendingDraw}.`
+          ? `Stack penalty active — you must counter with a +${state.pendingStackValue} or higher, or draw ${state.pendingDraw}.`
           : 'Card does not match color or value.';
         throw Object.assign(new Error(msg), { code: 'illegal' });
       }
@@ -95,17 +105,30 @@ const UnoGame = {
         U.nextTurn(state);
 
       } else if (played.value === '+2') {
-        // Stack: add to pending, opponent must counter or absorb
+        // Stack: add to pending, opponent must counter (with a +2 or higher) or absorb
         state.pendingDraw += 2;
+        state.pendingStackValue = 2;
         state.log.push(`+2 stacked! ${U.playerLabel(state, opponent)} must counter or draw ${state.pendingDraw}.`);
         // Pass turn to opponent — they decide to counter or draw
         U.nextTurn(state);
 
       } else if (played.value === 'wild+4') {
-        // Stack: add to pending, opponent must counter or absorb
+        // Stack: add to pending, opponent must counter (with a +4) or absorb
         state.pendingDraw += 4;
+        state.pendingStackValue = 4;
         state.log.push(`Wild +4 stacked! ${U.playerLabel(state, opponent)} must counter or draw ${state.pendingDraw}.`);
         U.nextTurn(state);
+
+      } else if (played.value === 'wild') {
+        // Plain color-change wild: the same player may immediately follow up
+        // with a card of the newly-chosen color if they have one — no
+        // compulsion, and no draw is forced if they don't.
+        if (hasPlayableCard(state, playerId)) {
+          state.log.push(`${label} may play another ${U.COLOR_NAMES[state.activeColor]} card, or pass.`);
+          // Turn stays with the current player.
+        } else {
+          U.nextTurn(state);
+        }
 
       } else {
         U.nextTurn(state);
@@ -122,10 +145,17 @@ const UnoGame = {
         // Player accepts the penalty stack
         const total = state.pendingDraw;
         state.pendingDraw = 0;
+        state.pendingStackValue = 0;
         U.drawCards(state, playerId, total);
         state.log.push(`${U.playerLabel(state, playerId)} drew ${total} cards (penalty).`);
         state.lastMove = { playerLabel: U.playerLabel(state, playerId), card: null, drawPenalty: total };
-        U.nextTurn(state);
+
+        // The player still gets their turn: if one of the cards they now
+        // hold matches the current color/value, they may play it — no
+        // compulsion, they can also just pass.
+        if (!hasPlayableCard(state, playerId)) {
+          U.nextTurn(state);
+        }
       } else {
         // Normal draw
         const drawn = U.drawCards(state, playerId, 1);

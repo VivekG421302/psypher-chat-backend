@@ -27,12 +27,21 @@ export function createDeck() {
   return shuffle(deck);
 }
 
-export function isPlayable(card, topCard, activeColor, pendingDraw = 0) {
-  // During a draw stack, only counter-cards are legal
+// The "addition" value of a stacking card: +2 adds 2, wild+4 adds 4.
+function stackAddition(card) {
+  if (card.value === '+2') return 2;
+  if (card.value === 'wild+4') return 4;
+  return 0;
+}
+
+export function isPlayable(card, topCard, activeColor, pendingDraw = 0, pendingStackValue = 0) {
+  // During a draw stack, only counter-cards are legal, and only if their
+  // addition is the same as or greater than the last stacked card's
+  // addition (e.g. a +2 cannot be played on top of a +4 stack).
   if (pendingDraw > 0) {
-    if (card.value === '+2') return true;   // can always stack +2 on +2 or +4 stack
-    if (card.value === 'wild+4') return true; // can always stack +4
-    return false;
+    const addition = stackAddition(card);
+    if (addition === 0) return false;
+    return addition >= pendingStackValue;
   }
   if (card.color === 'wild') return true;
   if (card.color === activeColor) return true;
@@ -54,7 +63,8 @@ export function freshState(playerIds) {
     unoCalled: new Set(),
     log: [],
     lastColorChange: null,
-    pendingDraw: 0,   // stacked draw penalty waiting to be resolved
+    pendingDraw: 0,        // stacked draw penalty waiting to be resolved
+    pendingStackValue: 0,  // addition of the last-played stack card (2 or 4); next stack card must be >= this
     lastMove: null,   // { playerLabel, card } for the "last move" display line
   };
 }
@@ -68,6 +78,7 @@ export function startGame(state) {
   state.unoCalled = new Set();
   state.log = [];
   state.pendingDraw = 0;
+  state.pendingStackValue = 0;
   state.lastMove = null;
 
   for (const pid of state.players) {
@@ -149,6 +160,7 @@ export function buildClientState(state, playerId) {
     started: state.started,
     lastColorChange: state.lastColorChange,
     pendingDraw: state.pendingDraw,
+    pendingStackValue: state.pendingStackValue,
     lastMove: state.lastMove,
   };
 }
