@@ -38,10 +38,11 @@ const UnoGame = {
 
       const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
 
-      // Pass pendingDraw so isPlayable can enforce stack-only mode
-      if (!U.isPlayable(card, top, state.activeColor, state.pendingDraw)) {
+      // Pass pendingDraw/pendingDrawUnit so isPlayable can enforce stack-only
+      // mode and the "same or greater" stacking rule (+2 can't land on a +4).
+      if (!U.isPlayable(card, top, state.activeColor, state.pendingDraw, state.pendingDrawUnit)) {
         const msg = state.pendingDraw > 0
-          ? `Stack penalty active — you must counter with +2 or +4, or draw ${state.pendingDraw}.`
+          ? `Stack penalty active — you must counter with +2 or higher, or draw ${state.pendingDraw}.`
           : 'Card does not match color or value.';
         throw Object.assign(new Error(msg), { code: 'illegal' });
       }
@@ -97,6 +98,7 @@ const UnoGame = {
       } else if (played.value === '+2') {
         // Stack: add to pending, opponent must counter or absorb
         state.pendingDraw += 2;
+        state.pendingDrawUnit = 2;
         state.log.push(`+2 stacked! ${U.playerLabel(state, opponent)} must counter or draw ${state.pendingDraw}.`);
         // Pass turn to opponent — they decide to counter or draw
         U.nextTurn(state);
@@ -104,8 +106,23 @@ const UnoGame = {
       } else if (played.value === 'wild+4') {
         // Stack: add to pending, opponent must counter or absorb
         state.pendingDraw += 4;
+        state.pendingDrawUnit = 4;
         state.log.push(`Wild +4 stacked! ${U.playerLabel(state, opponent)} must counter or draw ${state.pendingDraw}.`);
         U.nextTurn(state);
+
+      } else if (played.value === 'wild') {
+        // Plain color-change wild: the player who just set the color gets an
+        // optional follow-up — if they hold a card of the color they just
+        // chose (or another legal move), they may play it right away instead
+        // of the turn passing. If they don't, the turn passes normally with
+        // no draw required.
+        const newTop = state.discard[state.discard.length - 1];
+        if (U.hasPlayableCard(hand, newTop, state.activeColor, 0, 0)) {
+          state.bonusChance = true;
+          state.log.push(`${label} may play another ${U.COLOR_NAMES[state.activeColor]} card, or pass.`);
+        } else {
+          U.nextTurn(state);
+        }
 
       } else {
         U.nextTurn(state);
@@ -122,10 +139,21 @@ const UnoGame = {
         // Player accepts the penalty stack
         const total = state.pendingDraw;
         state.pendingDraw = 0;
+        state.pendingDrawUnit = 0;
         U.drawCards(state, playerId, total);
         state.log.push(`${U.playerLabel(state, playerId)} drew ${total} cards (penalty).`);
         state.lastMove = { playerLabel: U.playerLabel(state, playerId), card: null, drawPenalty: total };
-        U.nextTurn(state);
+
+        // The player still gets their turn after absorbing the penalty — if
+        // any card in their (now larger) hand matches the color on top,
+        // they may play it instead of the turn passing straight away.
+        const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
+        if (U.hasPlayableCard(state.hands[playerId], top, state.activeColor, 0, 0)) {
+          state.bonusChance = true;
+          state.log.push(`${U.playerLabel(state, playerId)} may still play a matching card, or pass.`);
+        } else {
+          U.nextTurn(state);
+        }
       } else {
         // Normal draw
         const drawn = U.drawCards(state, playerId, 1);

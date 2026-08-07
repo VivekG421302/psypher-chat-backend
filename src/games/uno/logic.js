@@ -27,17 +27,25 @@ export function createDeck() {
   return shuffle(deck);
 }
 
-export function isPlayable(card, topCard, activeColor, pendingDraw = 0) {
-  // During a draw stack, only counter-cards are legal
+export function isPlayable(card, topCard, activeColor, pendingDraw = 0, pendingDrawUnit = 0) {
+  // During a draw stack, only counter-cards are legal, and only if their
+  // per-card draw amount is the same as, or greater than, the amount that's
+  // currently stacked (e.g. a +2 can never be dropped on top of a +4 stack,
+  // but a +4 can always be dropped on top of a +2 stack).
   if (pendingDraw > 0) {
-    if (card.value === '+2') return true;   // can always stack +2 on +2 or +4 stack
-    if (card.value === 'wild+4') return true; // can always stack +4
+    if (card.value === '+2') return pendingDrawUnit <= 2;   // only stacks on a +2 (same)
+    if (card.value === 'wild+4') return true;                // stacks on +2 (greater) or +4 (same)
     return false;
   }
   if (card.color === 'wild') return true;
   if (card.color === activeColor) return true;
   if (topCard && card.value === topCard.value) return true;
   return false;
+}
+
+// Whether a player has ANY legal move in their hand right now.
+export function hasPlayableCard(hand, topCard, activeColor, pendingDraw = 0, pendingDrawUnit = 0) {
+  return (hand || []).some((c) => isPlayable(c, topCard, activeColor, pendingDraw, pendingDrawUnit));
 }
 
 export function freshState(playerIds) {
@@ -54,8 +62,10 @@ export function freshState(playerIds) {
     unoCalled: new Set(),
     log: [],
     lastColorChange: null,
-    pendingDraw: 0,   // stacked draw penalty waiting to be resolved
-    lastMove: null,   // { playerLabel, card } for the "last move" display line
+    pendingDraw: 0,       // stacked draw penalty waiting to be resolved
+    pendingDrawUnit: 0,   // per-card value (2 or 4) of the last stacked draw card
+    bonusChance: false,   // true when the current player gets an optional follow-up play
+    lastMove: null,       // { playerLabel, card } for the "last move" display line
   };
 }
 
@@ -68,6 +78,8 @@ export function startGame(state) {
   state.unoCalled = new Set();
   state.log = [];
   state.pendingDraw = 0;
+  state.pendingDrawUnit = 0;
+  state.bonusChance = false;
   state.lastMove = null;
 
   for (const pid of state.players) {
@@ -120,6 +132,7 @@ export function nextTurn(state) {
   state.turn = (((state.turn + state.direction) % n) + n) % n;
   const current = state.players[state.turn];
   state.unoCalled.delete(current);
+  state.bonusChance = false;
 }
 
 export function getOpponent(state, playerId) {
@@ -149,6 +162,8 @@ export function buildClientState(state, playerId) {
     started: state.started,
     lastColorChange: state.lastColorChange,
     pendingDraw: state.pendingDraw,
+    pendingDrawUnit: state.pendingDrawUnit,
+    bonusChance: state.bonusChance,
     lastMove: state.lastMove,
   };
 }
