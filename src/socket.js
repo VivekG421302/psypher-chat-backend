@@ -196,7 +196,7 @@ export function registerSocketHandlers(io) {
         handler(entry.state, socket.data.userId, payload || {});
         broadcastGameState(io, room, game, entry);
       } catch (err) {
-        socket.emit('game:error', { gameId, message: err.message || 'Invalid move.' });
+        socket.emit('game:error', { gameId, message: err.message || 'Invalid move.', code: err.code || null });
       }
     });
 
