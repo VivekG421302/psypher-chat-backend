@@ -34,11 +34,31 @@ function touch(room) {
   room.lastActivity = now();
 }
 
-export function createRoom({ name, color }) {
+// A basic shape check for a "revived" room code coming back from a client's
+// localStorage — it must look like something genRoomId() could have made,
+// otherwise we'd let people mint arbitrary custom codes.
+const ROOM_ID_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/;
+
+export function isValidRoomId(id) {
+  return typeof id === 'string' && ROOM_ID_PATTERN.test(id.toUpperCase());
+}
+
+export function createRoom({ id: requestedId } = {}) {
   let id;
-  do {
-    id = genRoomId();
-  } while (rooms.has(id));
+  if (requestedId) {
+    const normalized = String(requestedId).toUpperCase();
+    if (!isValidRoomId(normalized)) {
+      throw Object.assign(new Error('That room code is not a valid format.'), { code: 'bad_id' });
+    }
+    if (rooms.has(normalized)) {
+      throw Object.assign(new Error('That room code is already active.'), { code: 'exists' });
+    }
+    id = normalized;
+  } else {
+    do {
+      id = genRoomId();
+    } while (rooms.has(id));
+  }
 
   const room = {
     id,
