@@ -148,6 +148,21 @@ export function registerSocketHandlers(io) {
       });
     });
 
+    // ---------- Ping/pong latency measurement ----------
+    socket.on('ping', () => socket.emit('pong'));
+
+    // ---------- Game presence relay (green dot) ----------
+    socket.on('game:started', ({ roomId, gameId, startedBy } = {}) => {
+      const room = getRoom(roomId);
+      if (!room) return;
+      socket.to(roomChannel(room.id)).emit('game:started', { gameId, startedBy });
+    });
+    socket.on('game:ended', ({ roomId } = {}) => {
+      const room = getRoom(roomId);
+      if (!room) return;
+      socket.to(roomChannel(room.id)).emit('game:ended', {});
+    });
+
     // ---------- Games (generic, plugin-based) ----------
     socket.on('game:join', ({ roomId, gameId } = {}) => {
       const room = getRoom(roomId);
