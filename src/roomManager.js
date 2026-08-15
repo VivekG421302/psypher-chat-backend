@@ -210,11 +210,16 @@ function cleanup() {
     const connectedCount = Array.from(room.members.values()).filter((m) => m.connected).length;
     const idleFor = t - room.lastActivity;
 
-    if (room.members.size === 0 && idleFor > EMPTY_ROOM_GRACE_MS) {
+    // Rule: a room with literally no members left gets the full 15-minute
+    // inactivity window before it's wiped — this is what lets someone who
+    // got disconnected (or accidentally removed) rejoin with the same code.
+    if (room.members.size === 0 && idleFor > INACTIVITY_TIMEOUT_MS) {
       rooms.delete(id);
       removed++;
       continue;
     }
+    // Both members present but neither is actively connected: much shorter
+    // grace period, since this is almost always a page refresh/network blip.
     if (connectedCount === 0 && idleFor > EMPTY_ROOM_GRACE_MS) {
       rooms.delete(id);
       removed++;
