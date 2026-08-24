@@ -46,6 +46,11 @@ const SketchGame = {
       S.undoStroke(state, playerId);
     },
 
+    fill_background(state, playerId, payload) {
+      requireStarted(state);
+      S.fillBackground(state, playerId, payload?.color || '#FFFFFF');
+    },
+
     guess(state, playerId, payload) {
       requireStarted(state);
       const text = payload?.text;

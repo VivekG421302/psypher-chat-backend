@@ -78,6 +78,7 @@ function beginDrawingPhase(state, word) {
   if (state.usedWords.length > 40) state.usedWords.shift();
   state.phase = 'drawing';
   state.strokes = [];
+  state.bgColor = null;
   state.guesses = [];
   state.roundDeadline = Date.now() + state.roundDurationMs;
   state.log.push(`${playerLabel(state, getDrawer(state))} is drawing now — go!`);
@@ -188,6 +189,7 @@ export function clearCanvas(state, playerId) {
     throw Object.assign(new Error('Only the drawer can clear the canvas.'), { code: 'not_drawer' });
   }
   state.strokes = [];
+  state.bgColor = null;
 }
 
 export function undoStroke(state, playerId) {
@@ -286,6 +288,7 @@ export function buildClientState(state, playerId) {
     roundDeadline: state.phase === 'drawing' ? state.roundDeadline : null,
     roundDurationMs: state.roundDurationMs,
     strokes: state.strokes,
+    bgColor: state.bgColor ?? null,
     guesses: state.guesses.slice(-40),
     roundWinnerId: state.roundWinnerId,
     roundWinnerLabel: state.roundWinnerId ? playerLabel(state, state.roundWinnerId) : null,
@@ -295,4 +298,14 @@ export function buildClientState(state, playerId) {
     iWon: state.winner && state.winner !== 'draw' ? state.winner === playerId : null,
     log: state.log.slice(-8),
   };
+}
+
+export function fillBackground(state, playerId, color) {
+  if (state.phase !== 'drawing') {
+    throw Object.assign(new Error('No round in progress.'), { code: 'wrong_phase' });
+  }
+  if (playerId !== getDrawer(state)) {
+    throw Object.assign(new Error('Only the drawer can fill the background.'), { code: 'not_drawer' });
+  }
+  state.bgColor = color || '#FFFFFF';
 }
