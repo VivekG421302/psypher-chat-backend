@@ -4,7 +4,7 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
 const genRoomId = customAlphabet(ALPHABET, 8);
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
-const EMPTY_ROOM_GRACE_MS = 45 * 1000; // 45s grace for reconnects
+const EMPTY_ROOM_GRACE_MS = 5 * 60 * 1000; // 5 min grace for reconnects
 const CLEANUP_INTERVAL_MS = 30 * 1000;
 const MAX_MEMBERS_PER_ROOM = 2;
 const MAX_MESSAGE_BUFFER = 200;
@@ -218,9 +218,9 @@ function cleanup() {
       removed++;
       continue;
     }
-    // Both members present but neither is actively connected: much shorter
-    // grace period, since this is almost always a page refresh/network blip.
-    if (connectedCount === 0 && idleFor > EMPTY_ROOM_GRACE_MS) {
+    // All members disconnected (page refresh / network blip): give them
+    // EMPTY_ROOM_GRACE_MS (5 min) to reconnect before deleting the room.
+    if (connectedCount === 0 && room.members.size > 0 && idleFor > EMPTY_ROOM_GRACE_MS) {
       rooms.delete(id);
       removed++;
       continue;

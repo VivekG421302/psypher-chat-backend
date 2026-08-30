@@ -50,9 +50,13 @@ export function registerSocketHandlers(io) {
         messages: room.messages,
       });
 
-      socket.to(roomChannel(room.id)).emit('room:member_update', {
+      // Broadcast member list to ALL members in the room (including the joiner)
+      // so both sides always have an up-to-date member list after any join/rejoin.
+      io.to(roomChannel(room.id)).emit('room:member_update', {
         members: listMembers(room),
       });
+      // System message only to the OTHER member(s) — the joiner sees their
+      // own join via the member list update above.
       socket.to(roomChannel(room.id)).emit('room:system', {
         id: nanoid(8),
         text: `${existing ? existing.name : name} joined the room`,
