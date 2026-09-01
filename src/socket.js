@@ -69,7 +69,7 @@ export function registerSocketHandlers(io) {
     });
 
     // ---------- Chat ----------
-    socket.on('chat:message', ({ roomId, ciphertext, iv } = {}) => {
+    socket.on('chat:message', ({ roomId, ciphertext, iv, replyTo } = {}) => {
       const room = getRoom(roomId);
       if (!room || socket.data.userId == null) return;
       const sender = room.members.get(socket.data.userId);
@@ -84,6 +84,12 @@ export function registerSocketHandlers(io) {
         senderColor: sender.color,
         ts: Date.now(),
         reactions: {},
+        // Only pass through safe fields from replyTo
+        replyTo: replyTo ? {
+          id:         replyTo.id,
+          senderName: String(replyTo.senderName || '').slice(0, 64),
+          text:       String(replyTo.text || '').slice(0, 200),
+        } : null,
       };
       pushMessage(room, message);
       io.to(roomChannel(room.id)).emit('chat:message', message);
