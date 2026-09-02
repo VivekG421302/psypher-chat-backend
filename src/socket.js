@@ -129,6 +129,16 @@ export function registerSocketHandlers(io) {
       }
     });
 
+    // Mark messages as seen
+    socket.on('chat:seen', ({ roomId, upToTs } = {}) => {
+      const room = getRoom(roomId);
+      if (!room || socket.data.userId == null) return;
+      socket.to(roomChannel(room.id)).emit('chat:seen', {
+        byUserId: socket.data.userId,
+        upToTs,
+      });
+    });
+
     socket.on('chat:typing', ({ roomId, isTyping } = {}) => {
       const room = getRoom(roomId);
       if (!room || socket.data.userId == null) return;
