@@ -12,7 +12,7 @@ const ORIGIN = process.env.CORS_ORIGIN || '*';
 
 const app = express();
 app.use(cors({ origin: ORIGIN }));
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({ limit: '20mb' }));
 
 app.use('/api', routes);
 
@@ -23,6 +23,7 @@ app.get('/', (req, res) => {
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: ORIGIN, methods: ['GET', 'POST'] },
+  maxHttpBufferSize: 20 * 1024 * 1024, // 20 MB for file/image transfers
 });
 
 registerSocketHandlers(io);
