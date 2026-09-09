@@ -246,43 +246,57 @@ export function registerSocketHandlers(io) {
     socket.on('disconnect', () => {
       handleLeave(socket, { explicit: false });
     });
+  
+  // ── Chunked file transfer ──────────────────────────────────────────────────
+  // Transfers are buffered per-socket. Each transfer has a unique transferId.
+  const transfers = new Map(); // transferId → { roomId, meta, chunks[], total }
+
+  socket.on('file:start', ({ roomId, transferId, mime, name, total, replyTo } = {}) => {
+    const room = getRoom(roomId);
+    if (!room || socket.data.userId == null) return;
+    transfers.set(transferId, { roomId, mime, name, total, replyTo, chunks: [] });
   });
-}
 
-function handleLeave(socket, { explicit }) {
-  const { roomId, userId } = socket.data;
-  if (!roomId || userId == null) return;
-  const room = getRoom(roomId);
-  if (!room) return;
+  socket.on('file:chunk', ({ transferId, index, data } = {}) => {
+    const t = transfers.get(transferId);
+    if (!t) return;
+    t.chunks[index] = data;
+  });
 
-  socket.leave(roomChannel(roomId));
+  socket.on('file:end', ({ transferId } = {}) => {
+    const t = transfers.get(transferId);
+    if (!t) return;
+    transfers.delete(transferId);
 
-  if (explicit) {
-    const member = room.members.get(userId);
-    removeMember(room, userId);
-    room.games.clear();
-    socket.to(roomChannel(roomId)).emit('room:member_update', { members: listMembers(room) });
-    socket.to(roomChannel(roomId)).emit('room:system', {
-      id: nanoid(8),
-      text: `${member ? member.name : 'A user'} left the room`,
+    const room = getRoom(t.roomId);
+    if (!room || socket.data.userId == null) return;
+    const sender = room.members.get(socket.data.userId);
+    if (!sender) return;
+
+    // Reassemble base64 string
+    const dataUrl = t.chunks.join('');
+
+    const message = {
+      id: nanoid(12),
+      // Store as plaintext for file messages (already base64, not encrypted text)
+      ciphertext: dataUrl,
+      iv: null,
+      isFile: true,
+      fileMime: t.mime,
+      fileName: t.name,
+      senderId: sender.userId,
+      senderName: sender.name,
+      senderColor: sender.color,
       ts: Date.now(),
-    });
-  } else {
-    markDisconnected(room, userId);
-    socket.to(roomChannel(roomId)).emit('room:member_update', { members: listMembers(room) });
-  }
-
-  socket.data.roomId = null;
-  socket.data.userId = null;
-}
-
-function broadcastGameState(io, room, game, entry) {
-  for (const pid of entry.playerIds) {
-    const member = room.members.get(pid);
-    if (!member || !member.socketId) continue;
-    io.to(member.socketId).emit('game:state', {
-      gameId: game.id,
-      state: game.buildClientState(entry.state, pid),
-    });
-  }
+      reactions: {},
+      replyTo: t.replyTo ? {
+        id: t.replyTo.id,
+        senderName: String(t.replyTo.senderName || '').slice(0, 64),
+        text: String(t.replyTo.text || '').slice(0, 200),
+      } : null,
+    };
+    pushMessage(room, message);
+    io.to(roomChannel(room.id)).emit('chat:message', message);
+  });
+});
 }
