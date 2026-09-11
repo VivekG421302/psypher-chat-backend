@@ -7,4 +7,4 @@ services:
     startCommand: npm start
     envVars:
       - key: CORS_ORIGIN
-        value: https://your-frontend.vercel.app
+        value: https://psypher-chat.vercel.app

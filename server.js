@@ -11,7 +11,8 @@ const PORT = process.env.PORT || 3000;
 const ORIGIN = process.env.CORS_ORIGIN || '*';
 
 const app = express();
-app.use(cors({ origin: ORIGIN }));
+app.use(cors({ origin: '*', methods: ['GET','POST','OPTIONS'] }));
+app.options('*', cors());
 app.use(express.json({ limit: '20mb' }));
 
 app.use('/api', routes);
