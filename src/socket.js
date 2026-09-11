@@ -251,10 +251,10 @@ export function registerSocketHandlers(io) {
   // Transfers are buffered per-socket. Each transfer has a unique transferId.
   const transfers = new Map(); // transferId → { roomId, meta, chunks[], total }
 
-  socket.on('file:start', ({ roomId, transferId, mime, name, total, replyTo } = {}) => {
+  socket.on('file:start', ({ roomId, transferId, localId, mime, name, total, replyTo } = {}) => {
     const room = getRoom(roomId);
     if (!room || socket.data.userId == null) return;
-    transfers.set(transferId, { roomId, mime, name, total, replyTo, chunks: [] });
+    transfers.set(transferId, { roomId, mime, name, total, replyTo, localId, chunks: [] });
   });
 
   socket.on('file:chunk', ({ transferId, index, data } = {}) => {
@@ -278,6 +278,7 @@ export function registerSocketHandlers(io) {
 
     const message = {
       id: nanoid(12),
+      localId: t.localId || null, // echo back so sender can deduplicate
       // Store as plaintext for file messages (already base64, not encrypted text)
       ciphertext: dataUrl,
       iv: null,
